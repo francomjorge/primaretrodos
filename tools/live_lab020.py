@@ -70,8 +70,8 @@ static int oldIndexedW=0,''')
 # leaving LAB forces a complete redraw so no stale bar pixels remain.
 s=rep(s,'for(int y=yedge[sy];y<yedge[sy+1];y++){\n                const int half=', 'for(int y=yedge[sy];y<yedge[sy+1];y++){\n                if(labActive&&y>=labTop)continue;\n                const int half=')
 s=rep(s,'for(int y=y0;y<y1;y++){\n            if(fb){','for(int y=y0;y<y1;y++){\n            if(labActive&&y>=labTop)continue;\n            if(fb){')
-s=rep(s,'    if(written){lcd.flush(true);renderPresents++;}',r'''    if(labActive&&(labBarDirty||force)){drawLabBar();written+=480*(480-labTop);}
-    if(written){lcd.flush(true);renderPresents++;}''')
+s=rep(s,'    if(written){prisma_diag_phase(5);lcd.flush(true);renderPresents++;}',r'''    if(labActive&&(labBarDirty||force)){drawLabBar();written+=480*(480-labTop);}
+    if(written){prisma_diag_phase(5);lcd.flush(true);renderPresents++;}''')
 # Raw legacy rendering must not permanently overwrite the overlay.
 s=rep(s,'if(frameValid)GameVideo::draw(lcd,nullptr,nullptr,nativeFrame,frameW,frameH,frameW,{layoutMode,false});',
 '''if(frameValid)GameVideo::draw(lcd,nullptr,nullptr,nativeFrame,frameW,frameH,frameW,{layoutMode,false});
