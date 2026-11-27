@@ -11,7 +11,7 @@ def section(a,b):
 # Exact board definitions, menu framebuffer and full-screen flush from 071.
 board=section("static Arduino_SWSPI","static void showUIRects")
 # Exact GT911 polling, including stale sample timeout.
-touch=section("struct Point{"," #ifdef NEVER") if False else section("struct Point{","#ifdef PRISMA_COMBINED\nstruct DosTouchSample")
+touch=section("struct Point{","#ifdef PRISMA_COMBINED\nstruct DosTouchSample")
 setup=section("  pinMode(38,OUTPUT);","  Serial.printf(\"LCD worker")
 wire=section("  Wire1.begin(19,45,400000);","  Serial.println(\"BOOT 031 private ROM init")
 main=r'''#include <Arduino.h>
@@ -20,7 +20,7 @@ main=r'''#include <Arduino.h>
 #include "retro_ui.h"
 #include "menu_canvas.h"
 '''
-main+=board+touch+r'''
+main+=board+"static uint8_t addr=0;\n"+touch+r'''
 static const uint16_t BG=0x0842;
 static bool splashVisible=true,splashPressed=false,wasDown=false,selected=false;
 static bool hit(Point p,int x,int y,int w,int h){return p.x>=x&&p.x<x+w&&p.y>=y&&p.y<y+h;}
