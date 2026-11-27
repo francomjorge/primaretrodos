@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SC005: preserve SC004 engine and game data. Restore original selector + renderer."""
+"""SC006: preserve SC004 engine and game data. Restore original selector + renderer."""
 from pathlib import Path
 import sys, subprocess
 root=Path(sys.argv[1]).resolve()
@@ -14,8 +14,7 @@ p=src/"main.cpp"
 s=p.read_text()
 s=replace(s,'#include "menu_canvas.h"','#include "menu_canvas.h"\n#include "game_video.h"')
 s=replace(s,'extern "C" int prisma_scumm_run();','''extern "C" int prisma_scumm_run();
-static uint8_t layoutMode=GameVideo::FIT;
-static const char* layouts[]={"FULL","FIT","NATIVE"};
+static constexpr uint8_t layoutMode=GameVideo::FULL;
 static uint16_t* nativeFrame=nullptr;
 static int frameW=320,frameH=200;
 static bool frameValid=false;
@@ -52,7 +51,6 @@ static void drawScummCarousel(){
     RetroUI::center(d,240,382,"VGA / 256 COLORES",1,0x9cfa);
     RetroUI::button(d,6,184,44,84,"<",t);
     RetroUI::button(d,430,184,44,84,">",t);
-    RetroUI::button(d,12,436,150,32,layouts[layoutMode],t);
     RetroUI::button(d,318,436,150,32,"JUGAR",t,true);
     RetroUI::center(d,240,444,"1/1",2,0x9cfa);
     showUI();
@@ -60,22 +58,21 @@ static void drawScummCarousel(){
 ''')
 # Only one display owner after handoff; allocate pixel buffer in PSRAM before launching.
 s=replace(s,'    runtimeActive=true;','''    if(!nativeFrame)nativeFrame=(uint16_t*)heap_caps_malloc(320*240*2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-    if(!nativeFrame){Serial.println("SC005 FRAME ALLOCATION FAILED");drawScummCarousel();return false;}
+    if(!nativeFrame){Serial.println("SC006 FRAME ALLOCATION FAILED");drawScummCarousel();return false;}
     GameVideo::reset();
-    Serial.printf("SC005 LAYOUT %s\\n",layouts[layoutMode]);
+    Serial.println("SC006 LAYOUT FULL 480x480");
     runtimeActive=true;''')
-s=replace(s,'runtimeActive=false;Serial.println("SC004 TASK ALLOCATION FAILED");homeUI();return false;','runtimeActive=false;free(nativeFrame);nativeFrame=nullptr;Serial.println("SC005 TASK ALLOCATION FAILED");drawScummCarousel();return false;')
+s=replace(s,'runtimeActive=false;Serial.println("SC004 TASK ALLOCATION FAILED");homeUI();return false;','runtimeActive=false;free(nativeFrame);nativeFrame=nullptr;Serial.println("SC006 TASK ALLOCATION FAILED");drawScummCarousel();return false;')
 s=replace(s,'''if(!selected&&hit(p,16,90,448,148)){menuCanvas.release();selected=dos_start(lcd);}
       else if(selected&&hit(p,12,10,90,44))homeUI();''','''if(!selected&&hit(p,16,90,448,148)){drawScummCarousel();}
       else if(selected&&hit(p,12,10,90,44))homeUI();
-      else if(selected&&hit(p,12,436,150,32)){layoutMode=(layoutMode+1)%3;drawScummCarousel();}
       else if(selected&&(hit(p,56,70,368,344)||hit(p,318,436,150,32))){
           menuCanvas.release();dos_start(lcd);
       }''')
 # Preserve old splash/menu; only label the new build.
-s=s.replace("SC004","SC005")
+s=s.replace("SC004","SC006")
 p.write_text(s)
-p=src/"retro_ui.h";p.write_text(p.read_text().replace("SC004","SC005"))
+p=src/"retro_ui.h";p.write_text(p.read_text().replace("SC004","SC006"))
 p=src/"native/components/backends/platform/esp32/osystem-display.cpp"
 s=p.read_text()
 s=replace(s,'extern "C" void prisma_lcd_flush();','extern "C" void prisma_lcd_flush();\nextern "C" void prisma_frame_begin(int,int);')
@@ -83,4 +80,4 @@ s=replace(s,'extern "C" void prisma_lcd_flush();','extern "C" void prisma_lcd_fl
 s=replace(s,'int left=(480-w)/2,top=(480-h)/2;','prisma_frame_begin(w,h);\n    int left=(480-w)/2,top=(480-h)/2;')
 s=replace(s,'const int w=_gameWidth,h=_gameHeight,left=(480-w)/2,top=(480-h)/2;','const int w=_gameWidth,h=_gameHeight,left=(480-w)/2,top=(480-h)/2;\n    prisma_frame_begin(w,h);')
 p.write_text(s)
-print("SC005: original scaler, single-game carousel, inverse touch mapping; native engine unchanged")
+print("SC006: original scaler, single-game carousel, inverse touch mapping; native engine unchanged")
