@@ -86,13 +86,12 @@ s=rep(s,'if(choice>=0&&choice<11){setVisual(VisualMode(choice));done=true;}\n   
 '''if(choice>=0&&choice<visualCount){setVisual(VisualMode(choice));setLab(false);done=true;}
             else if(choice==11){setLab(true);done=true;}
             else if(choice==12)done=true;''')
-# This is the visual modal's restore, not the separate save dialog.
-s=rep(s,'    lcd.flush(true);indexedValid=false;\n}\n\nstatic volatile bool runtimeActive=false;',
-'''    if(labActive)drawLabBar();
-    lcd.flush(true);indexedValid=false;
-}
-
-static volatile bool runtimeActive=false;''')
+# Scope the restore to the visual menu rather than matching trailing whitespace.
+a=s.index('extern "C" void prisma_visual_menu(){')
+b=s.index('static volatile bool runtimeActive=false;',a)
+t=s[a:b]
+t=rep(t,'    lcd.flush(true);indexedValid=false;','    if(labActive)drawLabBar();\n    lcd.flush(true);indexedValid=false;')
+s=s[:a]+t+s[b:]
 p.write_text(s.replace("SC019","SC020"))
 p=src/"retro_ui.h";p.write_text(p.read_text().replace("SC019","SC020"))
 p=src/"native/components/backends/platform/esp32/osystem-events.cpp";s=p.read_text()
