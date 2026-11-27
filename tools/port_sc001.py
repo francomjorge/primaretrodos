@@ -241,7 +241,7 @@ def main(s):
     s=s[:a]+"""void select_game() {
     snprintf(base,sizeof(base),"monkey1");
     snprintf(dir,sizeof(dir),"/flash/roms/scummvm/monkey1");
-    snprintf(savedir,sizeof(savedir),"%s/saves",dir);
+    snprintf(savedir,sizeof(savedir),"/flash/roms/scummvm/monkey1/saves");
     printf("SC001 GAME path=%s\\n",dir);
     ((_Esp32::OSystem_Esp32*)g_system)->setSaveDir(savedir);
 }
