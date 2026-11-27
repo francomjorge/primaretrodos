@@ -14,7 +14,7 @@ s=s[:a]+r'''
 // writes after handoff; setup and the idle menu use it before handoff.
 struct ScDiag {
     uint32_t magic,phase,seq;
-    char gfx[192],cpu[192],event[96];
+    char gfx[192],cpu[192],event[96],profile[192];
 };
 RTC_NOINIT_ATTR static ScDiag diag;
 static uint32_t bootReset=0,previousPhase=0;
@@ -23,7 +23,7 @@ static bool diagLive=false;
 extern "C" void prisma_diag_phase(uint32_t phase){diag.phase=phase;}
 extern "C" void prisma_diag_line(int kind,const char* fmt,...){
     char buf[192];va_list ap;va_start(ap,fmt);vsnprintf(buf,sizeof(buf),fmt,ap);va_end(ap);
-    char* dst=kind==0?diag.gfx:kind==1?diag.cpu:diag.event;
+    char* dst=kind==0?diag.gfx:kind==1?diag.cpu:kind==3?diag.profile:diag.event;
     const size_t n=kind==2?sizeof(diag.event):sizeof(diag.gfx);
     snprintf(dst,n,"%s",buf);++diag.seq;
     if(diagLive||kind==2)Serial.println(dst);
@@ -35,14 +35,15 @@ static void scDiagDump(){
     if(diag.gfx[0])Serial.println(diag.gfx);
     if(diag.cpu[0])Serial.println(diag.cpu);
     if(diag.event[0])Serial.println(diag.event);
+    if(diag.profile[0])Serial.println(diag.profile);
     Serial.printf("HEAP=%u PSRAM=%u STACK=%u\n",(unsigned)ESP.getFreeHeap(),
         (unsigned)ESP.getFreePsram(),(unsigned)uxTaskGetStackHighWaterMark(nullptr));
     Serial.println("SC011 LOG END");
 }
 static void scDiagInit(){
     bootReset=esp_reset_reason();
-    if(diag.magic!=0x53434431u||bootReset==ESP_RST_POWERON||bootReset==ESP_RST_BROWNOUT){
-        memset(&diag,0,sizeof(diag));diag.magic=0x53434431u;
+    if(diag.magic!=0x53434432u||bootReset==ESP_RST_POWERON||bootReset==ESP_RST_BROWNOUT){
+        memset(&diag,0,sizeof(diag));diag.magic=0x53434432u;
     }
     previousPhase=diag.phase;
     diag.phase=1;
