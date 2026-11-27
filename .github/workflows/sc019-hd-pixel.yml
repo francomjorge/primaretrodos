@@ -1,0 +1,110 @@
+name: PRISMA SC019 - adaptive HD pixel reconstruction
+on:
+  push:
+    branches: [sc019-hd-pixel]
+    paths:
+      - 'tools/restore_071_shell.py'
+      - 'tools/attach_scumm004.py'
+      - 'tools/menu_scale005.py'
+      - 'tools/touch007.py'
+      - 'tools/dirty_render008.py'
+      - 'tools/gestures_timing009.py'
+      - 'tools/reset_diag011.py'
+      - 'tools/scroll_profile012.py'
+      - 'tools/quiet_serial012.py'
+      - 'tools/f5_save013.py'
+      - 'tools/save_cards014.py'
+      - 'tools/edge_scale015.py'
+      - 'tools/outline_transition016.py'
+      - 'tools/visual_lab017.py'
+      - 'tools/hd_pixel019.py'
+      - 'tools/port_sc001.py'
+      - '.github/workflows/sc019-hd-pixel.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch exact PRISMA Retro 071
+        run: |
+          git init retro
+          git -C retro remote add origin https://github.com/francomjorge/ESP32P4.git
+          git -C retro fetch --depth=1 origin c3c475e9e36d2f0e53bf3c92b47d416fcf2e9a28
+          git -C retro checkout --detach FETCH_HEAD
+          python tools/restore_071_shell.py retro/firmware/s3-4848-retro
+      - name: Attach pinned native ScummVM
+        run: |
+          git init upstream
+          git -C upstream remote add origin https://github.com/fcipaq/scummvm_esp32.git
+          git -C upstream fetch --depth=1 origin c8053f4b606ec29ad7da2243b107e8941c9afd41
+          git -C upstream checkout --detach FETCH_HEAD
+          python tools/attach_scumm004.py retro/firmware/s3-4848-retro upstream
+          python tools/menu_scale005.py retro/firmware/s3-4848-retro
+          python tools/touch007.py retro/firmware/s3-4848-retro
+          python tools/dirty_render008.py retro/firmware/s3-4848-retro
+          python tools/gestures_timing009.py retro/firmware/s3-4848-retro
+          python tools/reset_diag011.py retro/firmware/s3-4848-retro
+          python tools/scroll_profile012.py retro/firmware/s3-4848-retro
+          python tools/quiet_serial012.py retro/firmware/s3-4848-retro
+          python tools/f5_save013.py retro/firmware/s3-4848-retro
+          python tools/save_cards014.py retro/firmware/s3-4848-retro
+          python tools/edge_scale015.py retro/firmware/s3-4848-retro
+          python tools/outline_transition016.py retro/firmware/s3-4848-retro
+          python tools/visual_lab017.py retro/firmware/s3-4848-retro
+          python tools/hd_pixel019.py retro/firmware/s3-4848-retro
+      - run: pip install platformio==6.1.18
+      - run: |
+          python -m venv /tmp/prisma-esp-venv
+          /tmp/prisma-esp-venv/bin/pip install esptool==5.0.1 click==8.1.8
+          /tmp/prisma-esp-venv/bin/python -I -m esptool version
+      - name: Install same Arduino platform as 071
+        working-directory: retro/firmware/s3-4848-retro
+        run: |
+          pio pkg install -e esp32-4848s040
+          python - <<'PY'
+          from pathlib import Path
+          wrapper=Path("/tmp/prisma-esptool")
+          wrapper.write_text('#!/bin/sh\nexec /tmp/prisma-esp-venv/bin/python -I -m esptool "$@"\n')
+          wrapper.chmod(0o755)
+          for p in (Path.home()/".platformio/platforms").glob("espressif32*/builder/main.py"):
+              s=p.read_text()
+              old="esptool_binary_path = install_esptool()"
+              assert old in s,p
+              p.write_text(s.replace(old,'esptool_binary_path = "/tmp/prisma-esptool"'))
+          PY
+          python tools/patch_gfx.py
+      - name: Compile native engine
+        working-directory: retro/firmware/s3-4848-retro
+        run: pio run -e esp32-4848s040
+      - name: Package and verify 16 MiB raw image
+        working-directory: retro/firmware/s3-4848-retro
+        run: |
+          set -eux
+          B=.pio/build/esp32-4848s040
+          mkdir -p dist
+          /tmp/prisma-esp-venv/bin/python -I -m esptool --chip esp32s3 merge-bin --flash-size 16MB --flash-mode dio --flash-freq 40m -o dist/PRISMA-SC019-factory-16MB.bin 0x0 "$B/bootloader.bin" 0x8000 "$B/partitions.bin" 0x10000 "$B/firmware.bin"
+          cp "$B/firmware.bin" dist/PRISMA-SC019-app.bin
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("dist/PRISMA-SC019-factory-16MB.bin")
+          data=p.read_bytes()
+          assert data[0]==0xe9 and data[2]==2 and data[3]==0x40,data[:4].hex()
+          assert data[0x8000:0x8002]==b"\xaa\x50"
+          assert data[0x10000]==0xe9
+          assert len(data)<=0x510000
+          p.write_bytes(data+b"\xff"*(0x1000000-len(data)))
+          assert p.stat().st_size==16777216
+          PY
+          (cd dist && sha256sum *.bin > SHA256SUMS.txt)
+          tar -czf dist/SC019-corresponding-source.tar.gz src platformio.ini partitions_scumm.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PRISMA-SC019-hd-pixel
+          path: retro/firmware/s3-4848-retro/dist/
+          if-no-files-found: error
