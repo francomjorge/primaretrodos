@@ -37,7 +37,7 @@ s=rep(s,'''	_gamePixels = (byte *) malloc(_screen_width * _screen_height);
     _gamePixels=(byte*)calloc(gameCapacity,1);
     if(!_gamePixels){prisma_diag_line(2,"SURFACE INITIAL ALLOCATION FAILED");abort();}
     prisma_game_size(_gameWidth,_gameHeight);''')
-s=rep(s,'  free(_gamePixels);','  free(_gamePixels);\n  _gamePixels=nullptr;gameCapacity=0;')
+s=rep(s,'\n  free(_gamePixels);','\n  free(_gamePixels);\n  _gamePixels=nullptr;gameCapacity=0;')
 # Preserve fast copy for the valid, common case; clip only exceptional rectangles.
 s=rep(s,'	byte *dst = _gamePixels + y * _gameWidth + x;',r'''    if(!buf||!_gamePixels||w<=0||h<=0||pitch<w)return;
     const byte* clipped=(const byte*)buf;
