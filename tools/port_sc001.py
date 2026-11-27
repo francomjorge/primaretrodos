@@ -147,7 +147,8 @@ void OSystem_Esp32::initInput(){
     c.master.clk_speed=400000;
     if(i2c_param_config(I2C_NUM_1,&c)!=ESP_OK ||
        i2c_driver_install(I2C_NUM_1,I2C_MODE_MASTER,0,0,0)!=ESP_OK)return;
-    for(uint8_t a: {0x5d,0x14}){addr=a;uint8_t id[4];if(rd(0x8140,id,4)==ESP_OK){_isInputInit=true;printf("SC001 GT911 READY 0x%02x\\n",a);return;}}
+    const uint8_t addresses[]={0x5d,0x14};
+    for(uint8_t a: addresses){addr=a;uint8_t id[4];if(rd(0x8140,id,4)==ESP_OK){_isInputInit=true;printf("SC001 GT911 READY 0x%02x\\n",a);return;}}
     addr=0;printf("SC001 GT911 NOT FOUND\\n");
 }
 }
