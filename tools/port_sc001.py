@@ -188,28 +188,26 @@ bool OSystem_Esp32::pollEvent(Common::Event& event){
 }
 }
 """)
-# SD SPI: keep LCD command CS high; never format.
+# Internal FAT partition, no SD or formatting on mount failure.
 backend("osystem-sdcard.cpp",lambda s:s[:s.index('#include "osystem.h"')]+"""#include "osystem.h"
 #include "esp_vfs_fat.h"
-#include "driver/spi_master.h"
-#include "driver/sdspi_host.h"
-#include "driver/gpio.h"
-#include "sdmmc_cmd.h"
+#include "wear_levelling.h"
 namespace _Esp32 {
-static sdmmc_card_t* card=nullptr;
+static wl_handle_t handle=WL_INVALID_HANDLE;
 bool OSystem_Esp32::initSDcard(){
-    if(card)return true;
-    gpio_set_direction(GPIO_NUM_39,GPIO_MODE_OUTPUT);gpio_set_level(GPIO_NUM_39,1);
-    spi_bus_config_t bus={};bus.mosi_io_num=47;bus.miso_io_num=41;bus.sclk_io_num=48;
-    bus.quadwp_io_num=-1;bus.quadhd_io_num=-1;bus.max_transfer_sz=4096;
-    if(spi_bus_initialize(SPI2_HOST,&bus,SPI_DMA_CH_AUTO)!=ESP_OK)return false;
-    sdmmc_host_t host=SDSPI_HOST_DEFAULT();host.slot=SPI2_HOST;host.max_freq_khz=5000;
-    sdspi_device_config_t slot=SDSPI_DEVICE_CONFIG_DEFAULT();slot.host_id=SPI2_HOST;slot.gpio_cs=GPIO_NUM_42;
-    esp_vfs_fat_sdmmc_mount_config_t cfg={};cfg.format_if_mount_failed=false;cfg.max_files=15;
-    esp_err_t err=esp_vfs_fat_sdspi_mount("/sd",&host,&slot,&cfg,&card);
-    printf("SC001 SD %s\\n",esp_err_to_name(err));return err==ESP_OK;
+    if(handle!=WL_INVALID_HANDLE)return true;
+    esp_vfs_fat_mount_config_t cfg={};
+    cfg.format_if_mount_failed=false;cfg.max_files=15;cfg.allocation_unit_size=4096;
+    esp_err_t err=esp_vfs_fat_spiflash_mount_rw_wl("/flash","games",&cfg,&handle);
+    printf("SC001 FLASH FAT %s\\n",esp_err_to_name(err));
+    return err==ESP_OK;
 }
-void OSystem_Esp32::destroySDcard(){if(card){esp_vfs_fat_sdcard_unmount("/sd",card);card=nullptr;spi_bus_free(SPI2_HOST);}}
+void OSystem_Esp32::destroySDcard(){
+    if(handle!=WL_INVALID_HANDLE){
+        esp_vfs_fat_spiflash_unmount_rw_wl("/flash",handle);
+        handle=WL_INVALID_HANDLE;
+    }
+}
 }
 """)
 # Keep engine mixer serviced at real-time cadence, without touching audio hardware.
@@ -242,7 +240,7 @@ def main(s):
     a=s.index("void select_game() {");z=s.index("void app_main(void)",a)
     s=s[:a]+"""void select_game() {
     snprintf(base,sizeof(base),"monkey1");
-    snprintf(dir,sizeof(dir),"/sd/roms/scummvm/monkey1");
+    snprintf(dir,sizeof(dir),"/flash/roms/scummvm/monkey1");
     snprintf(savedir,sizeof(savedir),"%s/saves",dir);
     printf("SC001 GAME path=%s\\n",dir);
     ((_Esp32::OSystem_Esp32*)g_system)->setSaveDir(savedir);
@@ -265,6 +263,20 @@ p.write_text(s)
 nvs,data,nvs,0x9000,0x6000
 phy_init,data,phy,0xf000,0x1000
 factory,app,factory,0x10000,0x600000
-storage,data,spiffs,0x610000,0x3F0000
+games,data,fat,0x610000,0x9F0000
 """)
+# Remove unused PWM component and stale registry metadata.
+import shutil
+manifest=root/"main/idf_component.yml"
+manifest.write_text('dependencies:\n  idf:\n    version: ">=5.2.1,<5.3"\n')
+shutil.rmtree(root/"managed_components",ignore_errors=True)
+(root/"dependencies.lock").unlink(missing_ok=True)
+# FAT image is generated with the same ESP-IDF version as the firmware.
+with (root/"main/CMakeLists.txt").open("a") as cm:
+    cm.write('\nfatfs_create_spiflash_image(games "'+chr(36)+'{CMAKE_SOURCE_DIR}/game_data" FLASH_IN_PROJECT)\n')
+(root/"game_data/roms/scummvm/monkey1/saves").mkdir(parents=True,exist_ok=True)
+(root/"game_data/roms/scummvm/monkey1/README.txt").write_text("Place your original MONKEY1.000 and MONKEY1.001 files here before packing.\n")
+edit("main/main.cpp",lambda s:replace(s,"  assert(dirNode.getChildren(files, Common::FSNode::kListAll));",'''  if(!dirNode.getChildren(files, Common::FSNode::kListAll)){
+    printf("SC001 GAME DIRECTORY MISSING\\n");return;
+  }'''.replace('MISSING\\n','MISSING\\\\n')).replace('    abort();','    return;'))
 print("SC001 board adaptation applied")
