@@ -293,7 +293,7 @@ Audio::Mixer* OSystem_Esp32::getMixer(){return mixer;}
 void OSystem_Esp32::destroyAudio(){if(task){vTaskDelete(task);task=nullptr;}delete mixer;mixer=nullptr;}
 }
 """)
-backend("osystem.cpp",lambda s:replace(s,"initDisplay();",'printf("SC002 DISPLAY begin\\\\n"); fflush(stdout); if (!initDisplay()) abort();').replace("initGraphics();",'printf("SC002 GRAPHICS begin\\\\n"); fflush(stdout); initGraphics();').replace("initAudio(20000);",'printf("SC002 MIXER begin\\\\n"); fflush(stdout); initAudio(20000);').replace("initInput();",'printf("SC002 INPUT begin\\\\n"); fflush(stdout); initInput();').replace("if (!initSDcard())",'printf("SC002 FLASH begin\\\\n"); fflush(stdout); if (!initSDcard())'))
+backend("osystem.cpp",lambda s:replace(s,"initDisplay();",'printf("SC002 DISPLAY begin\\n"); fflush(stdout); if (!initDisplay()) abort();').replace("initGraphics();",'printf("SC002 GRAPHICS begin\\n"); fflush(stdout); initGraphics();').replace("initAudio(20000);",'printf("SC002 MIXER begin\\n"); fflush(stdout); initAudio(20000);').replace("initInput();",'printf("SC002 INPUT begin\\n"); fflush(stdout); initInput();').replace("if (!initSDcard())",'printf("SC002 FLASH begin\\n"); fflush(stdout); if (!initSDcard())'))
 backend("osystem_gfx.cpp",lambda s:replace(s,"void OSystem_Esp32::warpMouse(int, int) {}","void OSystem_Esp32::warpMouse(int x, int y) { setCursorPosX(x<0?0:x>=_gameWidth?_gameWidth-1:x); setCursorPosY(y<0?0:y>=_gameHeight?_gameHeight-1:y); }"))
 # Direct boot to a known folder; no broken joystick selector in this first build.
 def main(s):
@@ -306,7 +306,7 @@ def main(s):
     ((_Esp32::OSystem_Esp32*)g_system)->setSaveDir(savedir);
 }
 """+s[z:]
-    s=replace(s,"void app_main(void) {","void app_main(void) {\\n  printf(\"SC002 APP MAIN UART0 115200\\\\n\"); fflush(stdout);")
+    s=replace(s,"void app_main(void) {","void app_main(void) {\n  printf(\"SC002 APP MAIN UART0 115200\\n\"); fflush(stdout);")
     s=replace(s,"ConfMan.setBool(\"subtitles\", false);","ConfMan.setBool(\"subtitles\", true);")
     s=replace(s,"  Engine *engine;\n  mEngine->createInstance(g_system, &engine);","  Engine *engine=nullptr;\n  mEngine->createInstance(g_system, &engine);\n  if(!engine){printf(\"SC002 ENGINE INIT FAILED\\n\");return;}")
     return s
