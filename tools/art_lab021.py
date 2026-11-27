@@ -29,7 +29,7 @@ static inline int artVariance(int a,int b,int c,int d){
 // Four overlapping 2x2 neighborhoods centered around each source pixel.
 // Select the lowest luminance variance, then average its actual RGB colors.
 // Ties prefer the region whose mean luminance is closest to the center.
-static void artBuildRow(int w){
+static void artBuildRow(int w,const uint8_t* localIndices,const uint8_t* edgeAbove,const uint8_t* edgeBelow,const uint16_t* localPal){
     for(int x=0;x<w;x++){
         int l=x?x-1:x,r=x+1<w?x+1:x;
         uint8_t e=localIndices[x],n=edgeAbove[x],so=edgeBelow[x];
@@ -70,7 +70,7 @@ s=rep(s,'    if(memcmp(previousPal,localPal,sizeof(localPal)))force=true;',r''' 
 s=rep(s,'            memcpy(edgeBelow,pixels+(sy+1<h?sy+1:sy)*w,w);',r'''            memcpy(edgeBelow,pixels+(sy+1<h?sy+1:sy)*w,w);
             // Keep verbs, inventory and text region outside the painterly pass.
             const bool paint=artMode()&&sy*200<h*144;
-            if(paint)artBuildRow(w);''')
+            if(paint)artBuildRow(w,localIndices,edgeAbove,edgeBelow,localPal);''')
 s=rep(s,'                        scaled[x]=localPal[v];','                        scaled[x]=paint?artRow[sx]:localPal[artMode()?e:v];')
 # Expand to 15 cells while retaining the 48-pixel live bar and all old modes.
 s=rep(s,'for(int i=0;i<visualCount;i++)button((i%4)*120,top+42+(i/4)*66,120,64,visualNames[i],i==visualMode);',
