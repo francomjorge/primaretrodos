@@ -11,6 +11,7 @@ on:
       - 'tools/gestures_timing009.py'
       - 'tools/reset_diag011.py'
       - 'tools/scroll_profile012.py'
+      - 'tools/quiet_serial012.py'
       - 'tools/port_sc001.py'
       - '.github/workflows/sc012-scroll-diag.yml'
   workflow_dispatch:
@@ -44,6 +45,7 @@ jobs:
           python tools/gestures_timing009.py retro/firmware/s3-4848-retro
           python tools/reset_diag011.py retro/firmware/s3-4848-retro
           python tools/scroll_profile012.py retro/firmware/s3-4848-retro
+          python tools/quiet_serial012.py retro/firmware/s3-4848-retro
       - run: pip install platformio==6.1.18
       - run: |
           python -m venv /tmp/prisma-esp-venv
