@@ -35,13 +35,14 @@ jobs:
           . /opt/esp/idf/export.sh
           mkdir -p dist
           cd upstream/build
-          python -m esptool --chip esp32s3 merge_bin --flash_mode dio --flash_freq 40m --flash_size 16MB --fill-flash-size 16MB -o ../../dist/PRISMA-SC001-factory-16MB.bin 0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin 0x10000 scumm-go.bin
+          python -m esptool --chip esp32s3 merge_bin --flash_mode dio --flash_freq 40m --flash_size 16MB --fill-flash-size 16MB -o ../../dist/PRISMA-SC001-factory-16MB.bin 0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin 0x10000 scumm-go.bin 0x610000 games.bin
           cp scumm-go.bin ../../dist/PRISMA-SC001-app.bin
+          cp games.bin ../../dist/PRISMA-SC001-games.bin
           cp scumm-go.elf ../../dist/
           test "$(wc -c < ../../dist/PRISMA-SC001-factory-16MB.bin)" -eq 16777216
           cd ../..
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
-          tar -czf dist/SC001-corresponding-source.tar.gz --exclude=upstream/.git --exclude=upstream/build upstream tools
+          tar -czf dist/SC001-corresponding-source.tar.gz --exclude=upstream/.git --exclude=upstream/build --exclude=upstream/game_data upstream tools
       - uses: actions/upload-artifact@v4
         with:
           name: PRISMA-SC001
