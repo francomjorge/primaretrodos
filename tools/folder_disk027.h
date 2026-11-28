@@ -1,5 +1,5 @@
 // SC027: synthesize a DOS FAT16 drive from one selected SD directory.
-// No writes, no temporary images, no modifications to source files.
+// Volatile sector writes in PSRAM only; no modifications to source files.
 // Exact 8.3 names only; reject a tree that cannot be represented losslessly.
 #include <dirent.h>
 #include <ctype.h>
@@ -9,7 +9,7 @@ class FolderDisk final : public Faux86::DiskInterface {
  static constexpr uint32_t diskSectors=65536,partSectors=64*16*63-part;
  static constexpr uint32_t rootStart=part+1+2*fatSectors,dataStart=rootStart+rootSectors;
  static constexpr uint32_t clusters=(part+partSectors-dataStart)/spc;
- static constexpr unsigned maxNodes=512;
+ static constexpr unsigned maxNodes=512,cacheCount=8,cacheSize=4096,overlayCount=512;
  struct Node {
    char path[256],name[11];
    uint32_t bytes;
@@ -24,6 +24,48 @@ class FolderDisk final : public Faux86::DiskInterface {
  uint64_t pos=0;
  FILE* file=nullptr;
  unsigned fileNode=0;
+ struct CacheSlot {uint32_t key=UINT32_MAX;unsigned used=0;};
+ CacheSlot cache[cacheCount];
+ uint8_t* cacheData=nullptr;
+ uint8_t* overlay=nullptr;
+ uint32_t overlayTags[overlayCount];
+ unsigned overlayUsed=0;
+ bool overlayFailed=false;
+ char launch[13]={};
+ bool carmen=false;
+ static bool executable(const Node& n){
+   return !n.dir&&(!memcmp(n.name+8,"EXE",3)||!memcmp(n.name+8,"COM",3)||!memcmp(n.name+8,"BAT",3));
+ }
+ static void filename(const Node& n,char* out){
+   unsigned b=0;for(unsigned i=0;i<8&&n.name[i]!=' ';i++)out[b++]=n.name[i];
+   out[b++]='.';for(unsigned i=8;i<11&&n.name[i]!=' ';i++)out[b++]=n.name[i];
+   out[b]=0;
+ }
+ void chooseLaunch(const char* path){
+   char lower[256];unsigned n=0;
+   for(;path[n]&&n<sizeof(lower)-1;n++)lower[n]=tolower((unsigned char)path[n]);
+   lower[n]=0;carmen=strstr(lower,"carmen")!=nullptr;
+   const char* preferred[]={"PRISMA.BAT","CARMEN.BAT","CARMEN.EXE","CARMEN.COM","WORLD.BAT","WORLD.EXE","WORLD.COM","PRINCE.EXE","PRINCE.COM","START.BAT","PLAY.BAT","RUN.BAT","GAME.BAT"};
+   unsigned best=999,chosen=0,unique=0,number=0;
+   for(unsigned i=1;i<count;i++){
+     if(nodes[i].parent||!executable(nodes[i]))continue;
+     char name[13];filename(nodes[i],name);
+     Serial.printf("SC029 DOS executable %s\n",name);
+     if(strstr(name,"SETUP")||strstr(name,"INSTALL")||strstr(name,"CONFIG")||strstr(name,"UNINST")||strstr(name,"README"))continue;
+     unique=i;++number;
+     for(unsigned rank=0;rank<sizeof(preferred)/sizeof(*preferred);rank++){
+       if(rank>=1&&rank<=6&&!carmen)continue;
+       if(!strcmp(name,preferred[rank])&&rank<best){chosen=i;best=rank;}
+     }
+   }
+   if(!chosen&&number==1)chosen=unique;
+   if(chosen)filename(nodes[chosen],launch);
+   Serial.printf("SC029 DOS launch=%s carmen=%d candidates=%u\n",launch[0]?launch:"MANUAL",carmen,number);
+ }
+ int overlayFind(uint32_t lba)const{
+   for(unsigned i=0;i<overlayUsed;i++)if(overlayTags[i]==lba)return int(i);
+   return -1;
+ }
  static void put16(uint8_t* p,uint16_t v){p[0]=v;p[1]=v>>8;}
  static void put32(uint8_t* p,uint32_t v){put16(p,v);put16(p+2,v>>16);}
  static bool shortName(const char* in,char* out){
@@ -69,7 +111,7 @@ class FolderDisk final : public Faux86::DiskInterface {
  }
  void directoryEntry(uint8_t* b,unsigned id){
    const Node& n=nodes[id];memcpy(b,n.name,11);
-   b[11]=n.dir?0x10:0x21; // archive + read-only
+   b[11]=n.dir?0x10:0x20; // writes redirected to volatile PSRAM overlay
    put16(b+24,0x0021); // valid DOS date: 1980-01-01
    put16(b+26,n.first);put32(b+28,n.bytes);
  }
@@ -88,6 +130,8 @@ class FolderDisk final : public Faux86::DiskInterface {
    }
  }
  bool sector(uint32_t lba,uint8_t* b){
+   int changed=overlayFind(lba);
+   if(changed>=0){memcpy(b,overlay+changed*512,512);return true;}
    memset(b,0,512);
    if(lba==0){
      // Nonbootable MBR; BIOS boots FreeDOS from internal A:. Geometry
@@ -117,10 +161,24 @@ class FolderDisk final : public Faux86::DiskInterface {
    uint32_t offset=(cl-n.first)*spc+rel%spc;
    if(n.dir){directorySector(b,id,offset);return true;}
    offset*=512;if(offset>=n.bytes)return true;
-   if(fileNode!=id||!file){if(file)fclose(file);file=fopen(n.path,"rb");fileNode=id;}
-   if(!file||fseek(file,offset,SEEK_SET)!=0)return false;
+   uint32_t page=offset/cacheSize,key=(id<<16)|page;
+   unsigned slot=(id*17+page)%cacheCount;
    unsigned want=min<uint32_t>(512,n.bytes-offset);
-   return fread(b,1,want,file)==want;
+   if(cacheData&&cache[slot].key==key){
+     memcpy(b,cacheData+slot*cacheSize+offset%cacheSize,want);++diskHits;return true;
+   }
+   if(fileNode!=id||!file){if(file)fclose(file);file=fopen(n.path,"rb");fileNode=id;}
+   if(!file)return false;
+   if(cacheData){
+     unsigned bytes=min<uint32_t>(cacheSize,n.bytes-page*cacheSize);
+     if(fseek(file,page*cacheSize,SEEK_SET)!=0)return false;
+     uint8_t* dst=cacheData+slot*cacheSize;
+     cache[slot].key=UINT32_MAX;
+     if(fread(dst,1,bytes,file)!=bytes)return false;
+     cache[slot].key=key;cache[slot].used=bytes;
+     memcpy(b,dst+offset%cacheSize,want);return true;
+   }
+   return fseek(file,offset,SEEK_SET)==0&&fread(b,1,want,file)==want;
  }
 public:
  explicit FolderDisk(const char* path){
@@ -139,10 +197,14 @@ public:
      n.first=blocks?next:0;n.blocks=blocks;
      for(unsigned j=0;j<blocks;j++){owner[next]=i;fat[next]=j+1==blocks?0xffff:next+1;next++;}
    }
+   cacheData=(uint8_t*)ps_calloc(cacheCount,cacheSize);
+   chooseLaunch(path);
    valid=true;
    Serial.printf("SC027 FAT16 nodes=%u used_clusters=%u PSRAM_metadata=%u\n",count,next-2,unsigned(maxNodes*sizeof(Node)+4*(clusters+2)));
  }
- ~FolderDisk(){if(file)fclose(file);free(nodes);free(fat);free(owner);}
+ ~FolderDisk(){if(file)fclose(file);free(nodes);free(fat);free(owner);free(cacheData);free(overlay);}
+ const char* launchCommand()const{return launch;}
+ bool isCarmen()const{return carmen;}
  bool isValid() override{return valid;}
  uint64_t getSize() override{return uint64_t(diskSectors)*512;}
  uint64_t seek(uint64_t n) override{pos=min<uint64_t>(n,getSize());return pos;}
@@ -156,5 +218,23 @@ public:
    }
    ++diskReads;diskReadUs+=micros()-start;return done;
  }
- int write(const uint8_t*,unsigned) override{return 0;}
+ int write(const uint8_t* in,unsigned count) override{
+   if(!valid||!count||pos%512||count%512||pos+count>getSize())return 0;
+   if(!overlay)overlay=(uint8_t*)ps_calloc(overlayCount,512);
+   if(!overlay)return 0;
+   unsigned done=0;
+   while(done<count){
+     uint32_t lba=pos/512;
+     int slot=overlayFind(lba);
+     if(slot<0){
+       if(overlayUsed>=overlayCount){
+         if(!overlayFailed){Serial.println("SC029 DOS temporary write overlay full");overlayFailed=true;}
+         break;
+       }
+       slot=overlayUsed++;overlayTags[slot]=lba;
+     }
+     memcpy(overlay+slot*512,in+done,512);done+=512;pos+=512;
+   }
+   return done;
+ }
 };
