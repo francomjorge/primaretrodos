@@ -16,7 +16,7 @@ static void scanSD(){
     if(!mountLibrarySD())return;
     DIR* dir=opendir("/sd/roms/scummvm");''')
 a=s.index("static void homeUI(){")
-b=s.index('extern "C" int prisma_scumm_run();',a)
+b=s.index('\n}',a)+2
 assert "RetroUI::home" in s[a:b]
 s=s[:a]+r'''// Only the chosen directory is enumerated; nothing is executed by this catalog.
 static constexpr const char* dosRoots[]={"/sd/XT","/sd/386DX","/sd/486DX4"};
@@ -31,8 +31,6 @@ static bool dosTruncated=false,dosDirectoryFound=false;
 static uint8_t dosFileKind(const char* name){
     const char* ext=strrchr(name,'.');
     if(!ext)return 0;
-    if(!strcasecmp(ext,".zip"))return 2;
-    if(!strcasecmp(ext,".7z"))return 3;
     if(!strcasecmp(ext,".img")||!strcasecmp(ext,".ima"))return 4;
     return 0;
 }
