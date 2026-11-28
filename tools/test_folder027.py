@@ -19,8 +19,8 @@ using std::min;
 static unsigned micros(){return 0;}
 static void delay(unsigned){}
 static void* ps_calloc(size_t n,size_t size){return calloc(n,size);}
-struct SerialStub{template<class... T> void printf(const char* f,T... t){std::printf(f,t...);}} Serial;
-static unsigned diskReads=0,diskReadUs=0;
+struct SerialStub{void println(const char* s){std::puts(s);} template<class... T> void printf(const char* f,T... t){std::printf(f,t...);}} Serial;
+static unsigned diskReads=0,diskReadUs=0,diskHits=0;
 namespace Faux86 {
 struct DiskInterface{
 virtual ~DiskInterface()=default;
@@ -40,7 +40,15 @@ int main(int argc,char**argv){
  while(auto n=disk.read(buf,sizeof(buf)))if(fwrite(buf,1,n,out)!=unsigned(n))return 3;
  if(ftell(out)!=disk.getSize())return 4;
  fclose(out);
- if(disk.write(buf,512)!=0)return 5;
+ if(strcmp(disk.launchCommand(),"GAME.EXE"))return 5;
+ if(!diskHits)return 6;
+ disk.seek(512);memset(buf,0x5a,512);
+ if(disk.write(buf,512)!=512)return 7;
+ disk.seek(512);memset(buf,0,512);
+ if(disk.read(buf,512)!=512)return 8;
+ for(unsigned i=0;i<512;i++)if(buf[i]!=0x5a)return 9;
+ FolderDisk fresh(argv[1]);fresh.seek(512);
+ if(fresh.read(buf,512)!=512||buf[0]!=0)return 10;
  return 0;
 }
 '''
@@ -57,4 +65,4 @@ int main(int argc,char**argv){
         assert target.read_bytes()==(g/path).read_bytes(),path
     (g/"LONGFILENAME.TXT").touch()
     assert subprocess.run([str(d/"test"),str(g),str(img)]).returncode==1
-print("SC027 FAT16: MBR/BPB, nested file, multi-cluster file, empty file, exact bytes, write rejected, invalid 8.3 rejected")
+print("SC027 FAT16: MBR/BPB, nested file, multi-cluster file, empty file, exact bytes, launch detection, cache hits, volatile writes and unchanged original, invalid 8.3 rejected")
