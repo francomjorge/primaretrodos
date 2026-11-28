@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory() as tmp:
         run("mcopy","-i",str(img),cmd[0],str(d/"COMMAND.COM"))
         run("mcopy","-o","-i",str(img),str(d/"COMMAND.COM"),"::/COMMAND.COM")
     config=b"FILES=30\r\nBUFFERS=10\r\nLASTDRIVE=E\r\nSHELL=A:\\COMMAND.COM /P=A:\\AUTOEXEC.BAT\r\n"
-    auto=b"@ECHO OFF\r\nECHO PRISMA DOS - SD GAME READ ONLY\r\nC:\r\nDIR\r\n"
+    auto=b"@ECHO OFF\r\nECHO PRISMA DOS - SD GAME\r\nC:\r\n"
     for name,data in [("FDCONFIG.SYS",config),("CONFIG.SYS",config),("AUTOEXEC.BAT",auto),("FDAUTO.BAT",auto)]:
         p=d/name;p.write_bytes(data);run("mcopy","-o","-i",str(img),str(p),"::/"+name)
         check=d/("check-"+name)
