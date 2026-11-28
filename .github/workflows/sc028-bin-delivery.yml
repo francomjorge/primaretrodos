@@ -1,0 +1,43 @@
+name: Publish verified SC028-DOS application
+on:
+  push:
+    branches: [sc028-bin-delivery]
+    paths:
+      - '.github/workflows/sc028-bin-delivery.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve exact successful SC028-DOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PRISMA-SC028-DOS-dos-folders
+          run-id: 46142388988
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify app and source provenance
+        run: |
+          set -eux
+          cd dist
+          sha256sum -c SHA256SUMS.txt
+          python - <<'PY'
+          from pathlib import Path
+          a=Path("PRISMA-SC028-DOS-app.bin").read_bytes()
+          assert a[0]==0xe9
+          assert len(a)<=0x500000
+          assert b"SC028-DOS / b72dab89" in a
+          assert b"SC028 DOS VM READY" in a
+          assert b"CARPETA / FREEDOS" in a
+          assert b"MOTOR DOS PENDIENTE" not in a
+          print("Verified application bytes:", len(a))
+          PY
+          cat BUILD-IDENTITY.txt
+      - name: Publish raw application (no game data)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          gh release create SC028-DOS-b72dab89 --repo "$GITHUB_REPOSITORY" --target b72dab8984ec4bd0a03029f312260da54b989d75 --title "PRISMA SC028-DOS b72dab89" --notes "Verified application only. Flash at 0x10000 without erasing existing flash. Existing SCUMM game and save partitions are preserved on the compatible partition table. Hardware DOS runtime validation pending." dist/PRISMA-SC028-DOS-app.bin dist/BUILD-IDENTITY.txt dist/SHA256SUMS.txt dist/SC028-DOS-corresponding-source.tar.gz
