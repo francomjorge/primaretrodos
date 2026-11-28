@@ -109,11 +109,21 @@ s=rep(s,'   promptCheck=millis();bool prompt=atPrompt();',r'''   promptCheck=mil
      }
    }''')
 s=rep(s,'   if(bootPhase||loadingGame)logGuestText();','   if(bootPhase||loadingGame||folderBootPending||folderGamePending)logGuestText();')
+s=rep(s,'millis()-launchTime>8000','millis()-launchTime>20000')
 s=rep(s,'       loadingGame=false;host.video.invalidate();','       if(!prompt&&mode>3&&mode!=7)loadProgress(100,"Video del juego listo");\n       loadingGame=false;host.video.invalidate();')
 p.write_text(s.replace("SC030","SC031"))
 p=src/"main.cpp";s=p.read_text()
 s=rep(s,'bool dos_start_image(Arduino_RGB_Display&,const char*);','bool dos_start_image(Arduino_RGB_Display&,const char*);\nbool dos_classic_available(const char*);')
-s=rep(s,'static void drawDosCarousel(){',r'''static bool prebootClassicIfShared(){
+s=rep(s,'static void drawDosCarousel(){',r'''static void drawDosPrepareUI(int profile){
+    auto& d=ui();d.fillScreen(BG);
+    RetroUI::center(d,240,38,dosNames[profile],3,0xffff);
+    RetroUI::center(d,240,150,"PREPARANDO BIBLIOTECA",2,0x9cfa);
+    RetroUI::center(d,240,230,"Montando y leyendo SD",1,0xffff);
+    RetroUI::center(d,240,295,"5%",4,0xffff);
+    d.drawRect(40,355,400,16,0x5e9e);d.fillRect(42,357,19,12,0x5e9e);
+    showUI();
+}
+static bool prebootClassicIfShared(){
     // A single shared classic image contains its own two-game launcher.
     // Mixed catalogs remain selectable, so the classic route cannot hide SD games.
     if(dosCount!=1||dosEntries[0].kind!=5)return false;
@@ -124,7 +134,7 @@ s=rep(s,'static void drawDosCarousel(){',r'''static bool prebootClassicIfShared(
 }
 static void drawDosCarousel(){''')
 s=rep(s,'else{scanDosLibrary(i-1);drawDosCarousel();}',
-      'else{scanDosLibrary(i-1);if(!prebootClassicIfShared())drawDosCarousel();}')
+      'else{drawDosPrepareUI(i-1);scanDosLibrary(i-1);if(!prebootClassicIfShared())drawDosCarousel();}')
 s=rep(s,'item.kind==4?"IMAGEN / SOLO LECTURA":"CARPETA / FREEDOS"','item.kind==4?"IMAGEN / SOLO LECTURA":"CARPETA / CARGA AUTO"')
 s=rep(s,'      pollTouch();\n      if(!dos_launcher_touch',r'''      static uint32_t lastDosTouch=0;
       if(millis()-lastDosTouch>=12){
